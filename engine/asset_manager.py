@@ -1,4 +1,4 @@
-import os
+
 from .sprite_sheet import Spritesheet
 
 class AssetManager:
@@ -8,15 +8,13 @@ class AssetManager:
         self.sounds = {}        # name -> Sound (if se usa)
 
     def load_spritesheet(self, name, json_path):
-        """
-        Carga un spritesheet (JSON + image) y lo guarda bajo la clave name.
-        json_path: ruta al archivo json del spritesheet (puede contener ruta absoluta en meta.image)
-        """
-        if name in self.spritesheets:
-            return self.spritesheets[name]
-        sheet = Spritesheet(json_path)
-        self.spritesheets[name] = sheet
-        return sheet
+        """Carga un spritesheet desde un JSON y lo guarda con un nombre clave."""
+        try:
+            self.spritesheets[name] = Spritesheet(json_path)
+            print(f"Spritesheet '{name}' cargado desde '{json_path}'")
+        except Exception as e:
+            print(f"Error al cargar el spritesheet '{name}': {e}")
+            raise
 
     def load_image(self, name, image_path):
         """
@@ -39,20 +37,14 @@ class AssetManager:
         return sheet.get_frame(sprite_name)
 
     def get_animation(self, sheet_name, anim_name):
-        """
-        Obtiene lista de Surfaces para una animación.
-        anim_name puede ser un prefijo (p. ej. 'Sprites') que coincida con 'Sprites 0.ase', etc.
-        """
-        sheet = self.spritesheets.get(sheet_name)
-        if not sheet:
-            return []
-        # intentamos por nombre exacto de animación dentro del json meta.frameTags si existiera
-        frames = sheet.get_animation_frames(anim_name)
-        if frames:
-            return frames
-        # fallback: buscar por prefijo en nombres de frames
-        return sheet.get_animation_frames_by_prefix(anim_name)
+        """Obtiene los frames de una animación de un spritesheet ya cargado."""
+        if sheet_name not in self.spritesheets:
+            raise KeyError(f"No se ha cargado un spritesheet con el nombre '{sheet_name}'")
+        return self.spritesheets[sheet_name].get_animation_frames(anim_name)
 
     def get_image(self, name):
-        return self.images.get(name)
+        """Obtiene una imagen suelta ya cargada."""
+        if name not in self.images:
+            raise KeyError(f"No se ha cargado una imagen con el nombre '{name}'")
+        return self.images[name]
 

@@ -4,63 +4,41 @@ import pygame
 
 class GameObject(pygame.sprite.Sprite):
     """
-    Clase base mejorada que maneja imágenes estáticas y animaciones nombradas.
-    Compatible con spritesheets con duración por frame.
+    Clase base mejorada que maneja imágenes estáticas y animaciones.
     """
 
-    def __init__(self, x, y, animations, default_anim=None):
+    def __init__(self, x, y, frames):
         super().__init__()
 
-        # animations: dict { anim_name: [ (Surface, duration_ms), ... ] }
-        self.animations = animations
-        self.current_anim = default_anim or list(animations.keys())[0]
+        # frames puede ser una sola Surface o una lista de Surfaces
+        if isinstance(frames, list):
+            self.frames = frames
+            self.is_animated = True
+            self.current_frame = 0
+            self.image = self.frames[self.current_frame]
+            self.anim_speed = 0.1  # Velocidad de animación (frames por tick)
+            self.anim_timer = 0
+        else:
+            self.frames = [frames]
+            self.is_animated = False
+            self.image = frames
 
-        self.current_frame = 0
-        self.image, self.frame_duration = self.animations[self.current_anim][self.current_frame]
         self.rect = self.image.get_rect(center=(x, y))
 
-        self.anim_timer = 0  # acumulador en ms
+    def update_animation(self):
+        """Actualiza el frame de la animación si es necesario."""
+        if not self.is_animated or len(self.frames) < 2:
+            return
 
-        # Movimiento
-        self.vx = 0
-        self.vy = 0
-                
-        # Nuevo: control de espejo
-        self.flip_x = False 
-
-    def play(self, anim_name):
-        """Cambia de animación si es distinta a la actual."""
-        if anim_name != self.current_anim:
-            self.current_anim = anim_name
-            self.current_frame = 0
+        self.anim_timer += self.anim_speed
+        if self.anim_timer >= 1:
             self.anim_timer = 0
-            self.image, self.frame_duration = self.animations[self.current_anim][self.current_frame]
+            self.current_frame = (self.current_frame + 1) % len(self.frames)
+            self.image = self.frames[self.current_frame]
 
-    def update(self, dt):
-        """
-        dt en segundos (float). 
-        Maneja animación y movimiento.
-        """
-        # Actualizar animación
-        frames = self.animations[self.current_anim]
-        self.anim_timer += dt * 1000  # dt a ms
-        if self.anim_timer >= self.frame_duration:
-            self.anim_timer -= self.frame_duration
-            self.current_frame = (self.current_frame + 1) % len(frames)
-            self.image, self.frame_duration = frames[self.current_frame]
-
-        # Detectar dirección horizontal para flip
-        if self.vx < 0:
-            self.flip_x = True
-        elif self.vx > 0:
-            self.flip_x = False
-
-        # Actualizar posición
-        self.rect.x += int(self.vx * dt)
-        self.rect.y += int(self.vy * dt)
+    def update(self, *args, **kwargs):
+        """El método update ahora también se encarga de la animación."""
+        self.update_animation()
 
     def draw(self, surface):
-    # Dibujo espejado si flip_x es True
-        img = pygame.transform.flip(self.image, self.flip_x, False) if self.flip_x else self.image
-        surface.blit(img, self.rect)
-
+        surface.blit(self.image, self.rect)

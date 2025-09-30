@@ -23,11 +23,12 @@ class GameLoop:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
+            # Pasa los eventos a la clase hija para manejo específico
             self.handle_specific_events(event)
 
-    def _update(self, dt):
-        """Llama al método de actualización de la clase hija con dt en segundos."""
-        self.update_game_logic(dt)
+    def _update(self):
+        """Llama al método de actualización de la clase hija."""
+        self.update_game_logic()
 
     def _draw(self):
         """Llama al método de dibujado de la clase hija."""
@@ -38,9 +39,9 @@ class GameLoop:
         """El bucle principal del juego."""
         self.running = True
         while self.running:
-            dt = self.clock.tick(self.fps) / 1000.0  # milisegundos → segundos
+            self.clock.tick(self.fps)
             self._handle_events()
-            self._update(dt)
+            self._update()
             self._draw()
         pygame.quit()
 
@@ -48,7 +49,8 @@ class GameLoop:
     def handle_specific_events(self, event):
         pass
 
-    def update_game_logic(self, dt):
+    def update_game_logic(self):
+        """Actualiza la lógica específica del juego."""
         pass
 
     def draw_game_elements(self):

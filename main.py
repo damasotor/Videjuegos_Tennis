@@ -5,6 +5,7 @@ from engine.asset_manager import AssetManager
 from engine.game_loop import GameLoop
 from engine.sprite_sheet import Spritesheet as EngineSpritesheet
 from engine.game_object import GameObject
+from engine.player import Player
 
 
 class Spritesheet:
@@ -39,6 +40,9 @@ class Game(GameLoop):
         self.screen = screen
         self.clock = clock
         
+        # Almacenamos el último tiempo para calcular dt
+        self.last_tick = pygame.time.get_ticks()
+
         self.asset_manager = AssetManager()
         self.load_assets()
         self._setup_scene()
@@ -92,8 +96,8 @@ class Game(GameLoop):
         }
 
         # Jugadores
-        self.player1 = GameObject(40, 400, animations, default_anim="PlayerIdle")
-        self.player2 = GameObject(450, 40, animations, default_anim="EnemyIdle")
+        self.player1 = Player(40, 400, animations, default_anim="PlayerIdle")
+        self.player2 = Player(450, 40, animations, default_anim="EnemyIdle")
 
         self.all_sprites = pygame.sprite.Group(self.player1, self.player2)
 
@@ -101,7 +105,12 @@ class Game(GameLoop):
         if event.type == pygame.QUIT:
             self.running = False
 
-    def update_game_logic(self, dt):
+    def update_game_logic(self):
+        # Calcular dt dentro de la función, ya que no se pasa como argumento
+        now = pygame.time.get_ticks()
+        dt = (now - self.last_tick) / 1000.0  # Convertir a segundos
+        self.last_tick = now
+
         keys = pygame.key.get_pressed()
         
         if self.cancha:
@@ -221,4 +230,3 @@ class Game(GameLoop):
 
 if __name__ == "__main__":
     main()
-
