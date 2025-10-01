@@ -299,12 +299,13 @@
  "meta": {
   "app": "https://github.com/LibreSprite/LibreSprite/",
   "version": "1.1-dev",
-  "image": "/home/damaso/Documentos/Videojuegos/proyecto/assets/sprites/sprites.png",
+  "image": "sprites.png",
   "format": "RGBA8888",
   "size": { "w": 2368, "h": 96 },
   "scale": "1",
-  "frameTags": [{ "name": "EnemyIdle", "from": 0, "to": 3, "direction": "forward" }, { "name": "EnemyWalk", "from": 7, "to": 10, "direction": "forward" }, { "name": "PlayerIdle", "from": 32, "to": 35, "direction": "forward" }, { "name": "PlayerWalk", "from": 29, "to": 31, "direction": "forward" }
-  ],
+  "frameTags": [{ "name": "EnemyIdle", "from": 0, "to": 3, "direction": "forward" }, { "name": "EnemyWalk", "from": 7, "to": 10, "direction": "forward" }, { "name": "PlayerIdle", "from": 32, "to": 35, "direction": "forward" }, { "name": "PlayerWalk", "from": 29, "to": 31, "direction": "forward" },
+  { "name": "EnemyGolpeB", "from": 4, "to": 7, "direction": "forward" }, { "name": "EnemySaque", "from": 11, "to": 15, "direction": "forward" },
+  { "name": "PlayerGolpeB", "from": 20, "to": 22, "direction": "forward" }, { "name": "PlayerSaque", "from": 17, "to": 19, "direction": "forward" } ],
   "layers": [
    { "name": "Layer 1", "opacity": 255, "blendMode": "normal" }
   ]
