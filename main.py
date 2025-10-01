@@ -86,8 +86,13 @@ class Game(GameLoop):
         animations = {
             "EnemyIdle": build_anim("EnemyIdle"),
             "EnemyWalk": build_anim("EnemyWalk"),
+            "EnemyGolpeB": build_anim("EnemyGolpeB"),
+            "EnemySaque": build_anim("EnemySaque"),
+            
             "PlayerIdle": build_anim("PlayerIdle"),
             "PlayerWalk": build_anim("PlayerWalk"),
+            "PlayerGolpeB": build_anim("PlayerGolpeB"),
+            "PlayerSaque": build_anim("PlayerSaque"),
 
         }
 
@@ -120,10 +125,15 @@ class Game(GameLoop):
         elif keys[pygame.K_DOWN]:
             self.player1.vy = 150
 
-        if self.player1.vx != 0 or self.player1.vy != 0:
-            self.player1.play("PlayerWalk")
+        # Animaciones especiales Player1
+        if keys[pygame.K_o]:
+            self.player1.play("PlayerSaque", reset=False, lock=True)
+        elif keys[pygame.K_p]:
+            self.player1.play("PlayerGolpeB", reset=False, lock=True)
+        elif self.player1.vx != 0 or self.player2.vy != 0:
+            self.player1.play("PlayerWalk", reset=False, lock=False)
         else:
-            self.player1.play("PlayerIdle")
+            self.player1.play("PlayerIdle", reset=False, lock=False)
 
         # --- Jugador 2 (z,c,s,x) ---
         self.player2.vx = 0
@@ -136,11 +146,16 @@ class Game(GameLoop):
             self.player2.vy = -150
         elif keys[pygame.K_x]:
             self.player2.vy = 150
-
-        if self.player2.vx != 0 or self.player2.vy != 0:
-            self.player2.play("EnemyWalk")
+            
+        # Animaciones especiales enemigo
+        if keys[pygame.K_y]:
+            self.player2.play("EnemySaque", reset=False, lock=True)
+        elif keys[pygame.K_u]:
+            self.player2.play("EnemyGolpeB", reset=False, lock=True)
+        elif self.player2.vx != 0 or self.player2.vy != 0:
+            self.player2.play("EnemyWalk", reset=False, lock=False)
         else:
-            self.player2.play("EnemyIdle")
+            self.player2.play("EnemyIdle", reset=False, lock=False)
 
         # Actualizar animaciones y movimiento
         self.all_sprites.update(dt)
