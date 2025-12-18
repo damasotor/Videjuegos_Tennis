@@ -76,7 +76,24 @@ class GameObject(pygame.sprite.Sprite):
         self.rect.x += int(self.vx * dt)
         self.rect.y += int(self.vy * dt)
 
+
     def draw(self, surface):
-        # Dibujo espejado si flip_x es True
+        # 1. Aplicamos el espejado (tu lógica original)
         img = pygame.transform.flip(self.image, self.flip_x, False) if self.flip_x else self.image
-        surface.blit(img, self.rect)
+        
+        # 2. Aplicamos la perspectiva (solo si el objeto tiene scale_factor y es distinto de 1)
+        # hasattr evita errores si otros objetos no usan escala
+        if hasattr(self, 'scale_factor') and self.scale_factor != 1.0:
+            original_size = img.get_size()
+            new_size = (int(original_size[0] * self.scale_factor), 
+                        int(original_size[1] * self.scale_factor))
+            img = pygame.transform.scale(img, new_size)
+
+        # 3. Calculamos el nuevo rect para que la imagen se dibuje centrada 
+        # La 'z' eleva la imagen visualmente, pero el rect.center sigue en el suelo
+        altura = getattr(self, 'z', 0)
+        pos_visual = (self.rect.centerx, self.rect.centery - altura)
+        
+        new_rect = img.get_rect(center=pos_visual)
+        
+        surface.blit(img, new_rect)

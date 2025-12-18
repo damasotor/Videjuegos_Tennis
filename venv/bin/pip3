@@ -1,4 +1,4 @@
-#!/home/damaso/Documentos/Videojuegos/proyecto/venv/bin/python3
+#!/home/damaso/Documentos/Videojuegos/proyecto/Videjuegos_Tennis/venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys
