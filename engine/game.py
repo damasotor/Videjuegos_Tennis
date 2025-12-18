@@ -99,44 +99,137 @@ class Game(GameLoop):
         self.all_sprites = pygame.sprite.Group(self.player1, self.player2, self.ball)
 
     def handle_specific_events(self, event):
-        pass
+        if event.type == pygame.KEYDOWN:
+            # Salir con ESC
+            if event.key == pygame.K_ESCAPE:
+                self.running = False
+            
+            # Reiniciar con F2
+            if event.key == pygame.K_F2:
+                self.reset_game()
+
+    def reset_game(self):
+        """Reinicia la posición de los jugadores y la pelota"""
+        # Reposicionar Jugadores
+        self.player1.rect.center = (self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT - 60)
+        self.player2.rect.center = (self.SCREEN_WIDTH // 2, 80)
+        
+        # Resetear Pelota
+        self.ball.rect.center = (self.SCREEN_WIDTH // 2, self.SCREEN_HEIGHT // 2)
+        self.ball.vx = 0
+        self.ball.vy = -100
+        self.ball.vz = 50
+        self.ball.z = 150
+        
+        # Desbloquear animaciones por si acaso
+        self.player1.locked = False
+        self.player2.locked = False
+        self.player1.play("PlayerIdle", reset=True)
+        self.player2.play("EnemyIdle", reset=True)
+        
+        print("Juego Reiniciado")
+        
+    def _check_ball_collision(self, player, threshold):
+        """Verifica el impacto en el punto medio del jugador"""
+        # 1. Distancia Horizontal (X): Usamos los centros
+        dist_x = abs(player.rect.centerx - self.ball.rect.centerx)
+    
+        # 2. Distancia de Profundidad (Y): 
+        # El jugador y la pelota deben estar casi en la misma línea de 'suelo'
+        dist_y = abs(player.rect.centery - self.ball.rect.centery)
+    
+        # 3. Validación de Altura (Z):
+        # Definimos que la raqueta golpea entre la cintura y la cabeza (ej: entre 20 y 70px de altura)
+        altura_minima = 15
+        altura_maxima = 75
+        esta_en_altura_raqueta = altura_minima <= self.ball.z <= altura_maxima
+        
+        # Solo hay golpe si está cerca en X, en Y, y a la altura correcta
+        # Bajamos el margen de Y a 15 para que sea más preciso
+        return dist_x < threshold and dist_y < 15 and esta_en_altura_raqueta
 
     def update_game_logic(self, dt):
         keys = pygame.key.get_pressed()
+        dist_umbral = 45  # Ajusta según prefieras la sensibilidad del golpe
         
-        # --- Lógica de Jugador 1 ---
+        # --- LÓGICA DE JUGADOR 1 ---
         self.player1.vx = 0
         self.player1.vy = 0
         is_moving_p1 = False
+        
+        # Movimiento básico
         if keys[pygame.K_LEFT]: self.player1.vx = -150; is_moving_p1 = True
         elif keys[pygame.K_RIGHT]: self.player1.vx = 150; is_moving_p1 = True
         if keys[pygame.K_UP]: self.player1.vy = -150; is_moving_p1 = True
         elif keys[pygame.K_DOWN]: self.player1.vy = 150; is_moving_p1 = True
-        
-        if keys[pygame.K_o]: self.player1.play("PlayerSaque", reset=False, lock=True)
-        elif keys[pygame.K_p]: self.player1.play("PlayerGolpeB", reset=False, lock=True)
+
+        # GOLPES Y ANIMACIONES
+        # Prioridad 1: Si presiona 'o' (Saque/Alto)
+        if keys[pygame.K_o]:
+            self.player1.play("PlayerSaque", reset=False, lock=True)
+            # Física del golpe
+            if self._check_ball_collision(self.player1, dist_umbral):
+                self.ball.vy = -250  # Hacia el fondo
+                self.ball.vz = 400   # Salto alto
+                self.ball.vx = (self.ball.rect.centerx - self.player1.rect.centerx) * 4
+
+        # Prioridad 2: Si presiona 'p' (Golpe Bajo)
+        elif keys[pygame.K_p]:
+            self.player1.play("PlayerGolpeB", reset=False, lock=True)
+            # Física del golpe
+            if self._check_ball_collision(self.player1, dist_umbral):
+                self.ball.vy = -300  # Más rápido hacia el fondo
+                self.ball.vz = 200   # Salto bajo/tenso
+                self.ball.vx = (self.ball.rect.centerx - self.player1.rect.centerx) * 4
+
+        # Prioridad 3: Estados de movimiento (Solo si no está ejecutando un golpe)
         elif not self.player1.locked:
-            if is_moving_p1 and self.player1.current_anim != "PlayerWalk":
-                self.player1.play("PlayerWalk", reset=True, lock=False)
-            elif not is_moving_p1 and self.player1.current_anim != "PlayerIdle":
-                self.player1.play("PlayerIdle", reset=True, lock=False)
+            if is_moving_p1:
+                if self.player1.current_anim != "PlayerWalk":
+                    self.player1.play("PlayerWalk", reset=True, lock=False)
+            else:
+                if self.player1.current_anim != "PlayerIdle":
+                    self.player1.play("PlayerIdle", reset=True, lock=False)
 
         # --- Lógica de Jugador 2 ---
         self.player2.vx = 0
         self.player2.vy = 0
         is_moving_p2 = False
-        if keys[pygame.K_z]: self.player2.vx = -150; is_moving_p2 = True
-        elif keys[pygame.K_c]: self.player2.vx = 150; is_moving_p2 = True
-        if keys[pygame.K_s]: self.player2.vy = -150; is_moving_p2 = True
-        elif keys[pygame.K_x]: self.player2.vy = 150; is_moving_p2 = True
+        
+        # MOVIMIENTO JUGADOR 2 (W, A, S, D)
+        if keys[pygame.K_a]: self.player2.vx = -150; is_moving_p2 = True
+        elif keys[pygame.K_d]: self.player2.vx = 150; is_moving_p2 = True
+        if keys[pygame.K_w]: self.player2.vy = -150; is_moving_p2 = True
+        elif keys[pygame.K_s]: self.player2.vy = 150; is_moving_p2 = True
+        
+        # GOLPES Y ANIMACIONES
+        # Prioridad 1: Si presiona 'y' (Saque/Alto)
+        if keys[pygame.K_y]:
+            self.player2.play("EnemySaque", reset=False, lock=True)
+            # Física del golpe
+            if self._check_ball_collision(self.player2, dist_umbral):
+                self.ball.vy = -250  # Hacia el fondo
+                self.ball.vz = -400   # Salto alto
+                self.ball.vx = (self.ball.rect.centerx - self.player2.rect.centerx) * 4
 
-        if keys[pygame.K_y]: self.player2.play("EnemySaque", reset=False, lock=True)
-        elif keys[pygame.K_u]: self.player2.play("EnemyGolpeB", reset=False, lock=True)
+        # Prioridad 2: Si presiona 'u' (Golpe Bajo)
+        elif keys[pygame.K_u]:
+            self.player2.play("EnemyGolpeB", reset=False, lock=True)
+            # Física del golpe
+            if self._check_ball_collision(self.player2, dist_umbral):
+                self.ball.vy = -300  # Más rápido hacia el fondo
+                self.ball.vz = -200   # Salto bajo/tenso
+                self.ball.vx = (self.ball.rect.centerx - self.player2.rect.centerx) * 4
+
+        # Prioridad 3: Estados de movimiento (Solo si no está ejecutando un golpe)
         elif not self.player2.locked:
-            if is_moving_p2 and self.player2.current_anim != "EnemyWalk":
-                self.player2.play("EnemyWalk", reset=True, lock=False)
-            elif not is_moving_p2 and self.player2.current_anim != "EnemyIdle":
-                self.player2.play("EnemyIdle", reset=True, lock=False)
+            if is_moving_p2:
+                if self.player2.current_anim != "EnemyWalk":
+                    self.player2.play("EnemyWalk", reset=True, lock=False)
+            else:
+                if self.player2.current_anim != "EnemyIdle":
+                    self.player2.play("EnemyIdle", reset=True, lock=False)
+
         
         # Para choque de pelota con red
         y_antes = self.ball.rect.centery
@@ -164,22 +257,22 @@ class Game(GameLoop):
             # Comprobar si la pelota cruzó la línea de la red en este frame
             # (Si antes estaba arriba y ahora abajo, o viceversa)
             if (y_antes < net_y_floor <= y_ahora) or (y_ahora <= net_y_floor < y_antes):
-                
+                if 100 < self.ball.rect.centerx < 540:
                 # Si cruza la línea, comprobamos si su altura (Z) es menor a la red
-                if self.ball.z < net_height:
-                    # ¡CHOQUE! 
-                    # 1. Detenemos avance horizontal y de profundidad
-                    self.ball.vx = 0
-                    self.ball.vy = 0
+                    if self.ball.z < net_height:
+                        # ¡CHOQUE! 
+                        # 1. Detenemos avance horizontal y de profundidad
+                        self.ball.vx = 0
+                        self.ball.vy = 0
                     
-                    # 2. Posicionamos la pelota justo al lado del choque para que no traspase
-                    if y_antes < net_y_floor:
-                        self.ball.rect.bottom = net_y_floor - 1
-                    else:
-                        self.ball.rect.top = net_y_floor + 1
+                        # 2. Posicionamos la pelota justo al lado del choque para que no traspase
+                        if y_antes < net_y_floor:
+                            self.ball.rect.bottom = net_y_floor - 1
+                        else:
+                            self.ball.rect.top = net_y_floor + 1
                     
-                    # 3. Opcional: Un pequeño rebote hacia atrás para que no se quede pegada
-                    # self.ball.vy = -20 if y_ahora > net_y_floor else 20
+                        # 3. Opcional: Un pequeño rebote hacia atrás para que no se quede pegada
+                        # self.ball.vy = -20 if y_ahora > net_y_floor else 20
         
         # 3. Rebote
         if self.ball.z <= 0:
@@ -202,7 +295,7 @@ class Game(GameLoop):
         porcentaje_y = (self.ball.rect.centery - min_y) / rango_y
         porcentaje_y = max(0, min(1, porcentaje_y)) # Asegurar que esté entre 0 y 1
         
-        self.ball.scale_factor = 0.4 + (porcentaje_y * 0.8)
+        self.ball.scale_factor = 0.2 + (porcentaje_y * 0.2)
 
         # --- Límites de los Jugadores (Tu código original) ---
         if self.cancha:
