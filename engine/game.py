@@ -18,6 +18,7 @@ class Spritesheet:
 
     def get_animation_frames(self, anim_name):
         return self._engine_sheet.get_animation_frames(anim_name)
+        
 
 # --- Clase Game (Lógica Principal del Juego) ---
 class Game(GameLoop):
@@ -36,6 +37,16 @@ class Game(GameLoop):
         self.asset_manager = AssetManager()
         self.load_assets()
         self._setup_scene()
+
+        self.score_p1 = 0
+        self.score_p2 = 0
+        self.server = 1  # 1 para Jugador 1, 2 para Jugador 2
+        
+        # --- Lógica de Tenis Real ---
+        self.puntos_tenis = ["0", "15", "30", "40", "AD"] # AD es para ventaja (Advantage)
+        self.indices_puntos = [0, 0]  # [P1, P2]
+        self.games_ganados = [0, 0]   # [P1, P2]
+        self.server = 1
 
     def game_loop(self):
         self.run()
@@ -100,13 +111,13 @@ class Game(GameLoop):
 
     def handle_specific_events(self, event):
         if event.type == pygame.KEYDOWN:
-            # Salir con ESC
-            if event.key == pygame.K_ESCAPE:
-                self.running = False
-            
-            # Reiniciar con F2
             if event.key == pygame.K_F2:
-                self.reset_game()
+                self.score_p1 = 0
+                self.score_p2 = 0
+                self.server = 1
+                self.reset_for_serve()
+            elif event.key == pygame.K_ESCAPE:
+                self.running = False
 
     def reset_game(self):
         """Reinicia la posición de los jugadores y la pelota"""
@@ -140,7 +151,7 @@ class Game(GameLoop):
     
         # 3. Validación de Altura (Z):
         # Definimos que la raqueta golpea entre la cintura y la cabeza (ej: entre 20 y 70px de altura)
-        altura_minima = 15
+        altura_minima = 0
         altura_maxima = 75
         esta_en_altura_raqueta = altura_minima <= self.ball.z <= altura_maxima
         
@@ -150,7 +161,7 @@ class Game(GameLoop):
 
     def update_game_logic(self, dt):
         keys = pygame.key.get_pressed()
-        dist_umbral = 45  # Ajusta según prefieras la sensibilidad del golpe
+        dist_umbral = 40  # Ajusta según prefieras la sensibilidad del golpe
         
         # --- LÓGICA DE JUGADOR 1 ---
         self.player1.vx = 0
@@ -249,7 +260,7 @@ class Game(GameLoop):
             cancha_rect = self.cancha.get_rect(center=screen_rect.center)
             
             # La red está físicamente en el centro vertical de la cancha
-            net_y_floor = cancha_rect.centery 
+            net_y_floor = cancha_rect.centery - 10
             net_height = 55  # Esta es la altura en píxeles de tu sprite de red
             
             y_ahora = self.ball.rect.centery
@@ -320,6 +331,49 @@ class Game(GameLoop):
             if p.rect.right > w: p.rect.right = w 
             if p.rect.top < -15: p.rect.top = -15
             if p.rect.bottom > (h - 20): p.rect.bottom = h - 20
+            
+        # --- SISTEMA DE PUNTOS ---
+
+        # --- LÓGICA DE REBOTE Y PUNTOS ---
+        if self.ball.z <= 0:
+            self.ball.z = 0
+            
+            # Definimos los límites de la "cancha válida" (ajusta según tu sprite)
+            # Ejemplo: x entre 120 y 520, y entre 100 y 380
+            cancha_rect = pygame.Rect(120, 100, 400, 280) 
+            
+            # Si la pelota toca el suelo...
+            if not cancha_rect.collidepoint(self.ball.rect.center):
+                # ¡FUERA! Punto para el rival según en qué mitad caiga
+                if self.ball.rect.centery < self.SCREEN_HEIGHT // 2:
+                    self.anotar_punto(0) # Punto para P1 (abajo) porque cayó fuera arriba
+                else:
+                    self.anotar_punto(1) # Punto para P2 (arriba) porque cayó fuera abajo
+                
+                self.server = 1 if self.ball.rect.centery > self.SCREEN_HEIGHT // 2 else 2
+                self.reset_for_serve()
+            else:
+                # Si cae dentro, rebota (tu lógica actual)
+                self.ball.vz *= -0.6 
+                if abs(self.ball.vz) < 10: self.ball.vz = 0
+
+
+        # Si la pelota sale por arriba (Punto para P1)
+        if self.ball.rect.bottom < 0:
+            self.anotar_punto(0) # Jugador 1 anota
+            self.server = 2
+            self.reset_for_serve()
+
+        # Si la pelota sale por abajo (Punto para P2)
+        elif self.ball.rect.top > self.SCREEN_HEIGHT:
+            self.anotar_punto(1) # Jugador 2 anota
+            self.server = 1
+            self.reset_for_serve()
+            
+        # Si la pelota se detiene (choca con la red o se queda muerta)
+        elif self.ball.vx == 0 and self.ball.vy == 0 and self.ball.z == 0:
+            # Podrías añadir un temporizador aquí antes de resetear
+            pass
 
     def draw_game_elements(self):
         screen_rect = self.screen.get_rect()
@@ -359,8 +413,60 @@ class Game(GameLoop):
             self.screen.blit(self.red, red_rect.topleft)
 
         self.player1.draw(self.screen) # Jugador al frente
+        
+        # --- DIBUJAR MARCADOR ---
+        font = pygame.font.SysFont("Arial", 20, bold=True)
+
+        # Obtener los textos de tenis (0, 15, 30, 40, AD)
+        p1_tenis = self.puntos_tenis[self.indices_puntos[0]]
+        p2_tenis = self.puntos_tenis[self.indices_puntos[1]]
+        texto_juegos = font.render(f"GAMES - P1: {self.games_ganados[0]} | P2: {self.games_ganados[1]}", True, (255, 255, 255))
+        texto_puntos = font.render(f"PUNTOS - P1: {p1_tenis} | P2: {p2_tenis}", True, (255, 255, 0))
+
+        self.screen.blit(texto_juegos, (20, 20))
+        self.screen.blit(texto_puntos, (20, 45))
+
+        
 
         # FPS
         font = pygame.font.SysFont(None, 20)
         fps_text = font.render(f"FPS: {int(self.clock.get_fps())}", True, (255, 255, 255))
         self.screen.blit(fps_text, (5, 5))
+        
+    def reset_for_serve(self):
+        """Posiciona la pelota frente al jugador que saca"""
+        self.ball.vx = 0
+        self.ball.vy = 0
+        self.ball.vz = 0
+        self.ball.z = 0
+
+        if self.server == 1:
+            # Frente al Jugador 1 (abajo)
+            self.ball.rect.centerx = self.player1.rect.centerx + 20
+            self.ball.rect.centery = self.player1.rect.top + 50
+        else:
+            # Frente al Jugador 2 (arriba)
+            self.ball.rect.centerx = self.player2.rect.centerx -20 
+            self.ball.rect.centery = self.player2.rect.bottom - 50
+            
+            
+    def anotar_punto(self, jugador_index): # 0 para P1, 1 para P2
+        rival_index = 1 if jugador_index == 0 else 0
+        
+        # Lógica simplificada de puntuación
+        if self.indices_puntos[jugador_index] < 3: # De 0 a 30
+            self.indices_puntos[jugador_index] += 1
+        elif self.indices_puntos[jugador_index] == 3: # Está en 40
+            if self.indices_puntos[rival_index] < 3:
+                self.ganar_game(jugador_index)
+            elif self.indices_puntos[rival_index] == 3: # Deuce
+                self.indices_puntos[jugador_index] = 4 # Ventaja
+            elif self.indices_puntos[rival_index] == 4: # El rival tenía ventaja
+                self.indices_puntos[rival_index] = 3 # Vuelven a Deuce
+        elif self.indices_puntos[jugador_index] == 4: # Tenía ventaja y anota
+            self.ganar_game(jugador_index)
+
+    def ganar_game(self, jugador_index):
+        self.games_ganados[jugador_index] += 1
+        self.indices_puntos = [0, 0] # Resetear puntos del game
+        print(f"Juego para el Jugador {jugador_index + 1}!")
