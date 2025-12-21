@@ -48,6 +48,16 @@ class Game(GameLoop):
         self.games_ganados = [0, 0]   # [P1, P2]
         self.server = 1
         
+        # --- VARIABLES PARA EL MENÚ Y VELOCIDAD ---
+        self.state = "MENU"    # El juego empieza en el menú
+        self.menu_row = 0      # Fila seleccionada (0: Jugadores, 1: Velocidad)
+        self.option_players = 1
+        self.option_speed = 1  # 0: SLOW, 1: NORMAL, 2: FAST
+        
+        # Valores reales de multiplicación de velocidad
+        self.speed_values = [0.6, 1.0, 1.4] 
+        self.game_speed = 1.0  # Se actualizará al presionar ENTER
+        
         # Variables de control de impacto y rebote
         self.rebotó_una_vez = False
         self.ultimo_en_golpear = 0  # 1 para P1, 2 para P2
@@ -57,6 +67,10 @@ class Game(GameLoop):
         self.state = "MENU"
         self.menu_option = 1  # 1 para '1 PLAYER', 2 para '2 PLAYERS'
         self.num_players = 1
+        
+        # Multiplicadores de velocidad reales
+        self.speed_values = [0.6, 1.0, 1.4] 
+        self.game_speed = 1.0
 
     def game_loop(self):
         self.run()
@@ -122,12 +136,25 @@ class Game(GameLoop):
     def handle_specific_events(self, event):
         if event.type == pygame.KEYDOWN:
             if self.state == "MENU":
-                if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
-                    # Cambiar entre 1 y 2 (estilo toggle)
-                    self.menu_option = 1 if self.menu_option == 2 else 2
+                # Navegar entre filas (Jugadores o Velocidad)
+                if event.key == pygame.K_UP: self.menu_row = 0
+                if event.key == pygame.K_DOWN: self.menu_row = 1
                 
-                if event.key == pygame.K_RETURN: # Botón START
-                    self.num_players = self.menu_option
+                # Cambiar opciones con Izquierda/Derecha
+                if self.menu_row == 0: # Fila de Jugadores
+                    if event.key in [pygame.K_LEFT, pygame.K_RIGHT]:
+                        self.option_players = 2 if self.option_players == 1 else 1
+                
+                else: # Fila de Velocidad
+                    if event.key == pygame.K_RIGHT:
+                        self.option_speed = (self.option_speed + 1) % 3
+                    if event.key == pygame.K_LEFT:
+                        self.option_speed = (self.option_speed - 1) % 3
+
+                # Confirmar START
+                if event.key == pygame.K_RETURN:
+                    self.num_players = self.option_players
+                    self.game_speed = self.speed_values[self.option_speed]
                     self.state = "PLAYING"
                     self.reset_for_serve()
     
@@ -194,6 +221,9 @@ class Game(GameLoop):
         self.player1.vx = 0
         self.player1.vy = 0
         is_moving_p1 = False
+        
+        # Variable local para la velocidad actual
+        vel_p1 = 150 * self.game_speed
         
         if keys[pygame.K_LEFT]: self.player1.vx = -150; is_moving_p1 = True
         elif keys[pygame.K_RIGHT]: self.player1.vx = 150; is_moving_p1 = True
@@ -262,7 +292,7 @@ class Game(GameLoop):
             if self.player2.current_anim != anim: self.player2.play(anim, reset=True)
 
         # --- FÍSICA GLOBAL ---
-        self.all_sprites.update(dt)
+        self.all_sprites.update(dt * self.game_speed)
         self.ball.vz += self.GRAVITY * dt
         self.ball.z += self.ball.vz * dt
 
@@ -365,45 +395,45 @@ class Game(GameLoop):
         if self.ball.z <= 0 and not self.punto_finalizado:
             self.ball.z = 0
             
-            # Definimos el rectángulo de la cancha completa (ajusta estos valores a tu sprite)
-            # x_min, y_min, ancho, alto
+            # Definimos el rectángulo de la cancha basado en tu sprite (ajusta si es necesario)
             rect_cancha = pygame.Rect(120, 100, 400, 280) 
             mitad_y = rect_cancha.centery
             
-            # 1. ¿Cayó fuera de la cancha completa?
+            # 1. ¿Cayó fuera de la cancha completa? (OUT)
             if not rect_cancha.collidepoint(self.ball.rect.center):
-                # Si el P1 la tiró fuera del campo rival, punto para P2
-                if self.ultimo_en_golpear == 1: self.anotar_punto(1)
-                else: self.anotar_punto(0)
-                
+                # El punto va para el rival del que golpeó
+                # Si golpeó P1 (1), punto para P2 (índice 1). Si golpeó P2 (2), punto para P1 (índice 0).
+                punto_para = 1 if self.ultimo_en_golpear == 1 else 0
+                self.anotar_punto(punto_para)
                 self.punto_finalizado = True
                 self.reset_for_serve()
 
             # 2. ¿Cayó dentro de la cancha?
             else:
-                # Si es el SEGUNDO rebote, es punto para el que la lanzó
                 if self.rebotó_una_vez:
-                    if self.ultimo_en_golpear == 1: self.anotar_punto(0)
-                    else: self.anotar_punto(1)
-                    
+                    # SEGUNDO rebote: Punto para el que lanzó la pelota
+                    # P1 lanza -> punto para P1 (0). P2 lanza -> punto para P2 (1).
+                    self.anotar_punto(self.ultimo_en_golpear - 1)
                     self.punto_finalizado = True
                     self.reset_for_serve()
                 else:
-                    # Es el PRIMER rebote: Validar si cayó en el lado correcto
-                    # Si P1 golpea, debe caer en el lado de arriba (y < mitad)
+                    # PRIMER rebote: Validar red y campo correcto
+                    # Si P1 golpea, centery DEBE ser < mitad_y (campo de arriba)
+                    # Si P2 golpea, centery DEBE ser > mitad_y (campo de abajo)
                     lado_incorrecto = (self.ultimo_en_golpear == 1 and self.ball.rect.centery > mitad_y) or \
                                       (self.ultimo_en_golpear == 2 and self.ball.rect.centery < mitad_y)
                     
                     if lado_incorrecto:
-                        # Si no cruza la red o cae en tu propio campo, punto rival
-                        rival = 1 if self.ultimo_en_golpear == 2 else 0
-                        self.anotar_punto(rival)
+                        # No pasó la red: punto para el rival
+                        punto_para = 1 if self.ultimo_en_golpear == 1 else 0
+                        self.anotar_punto(punto_para)
                         self.punto_finalizado = True
                         self.reset_for_serve()
                     else:
                         # Rebote válido, sigue el juego
                         self.rebotó_una_vez = True
-                        self.ball.vz *= -0.5 # Rebote físico
+                        # Usamos la constante BOUNCE que tengas definida para mantener consistencia
+                        self.ball.vz *= self.BOUNCE if hasattr(self, 'BOUNCE') else -0.5
 
           
         # Si la pelota se detiene (choca con la red o se queda muerta)
@@ -416,21 +446,22 @@ class Game(GameLoop):
         self.screen.fill((0, 0, 0)) # Fondo negro clásico
         
         if self.state == "MENU":
-            font_title = pygame.font.SysFont("monospace", 50, bold=True)
-            font_menu = pygame.font.SysFont("monospace", 30)
             
-            # Título
-            title_surf = font_title.render("TOR TENNIS", True, (255, 255, 255))
-            self.screen.blit(title_surf, (self.SCREEN_WIDTH//2 - 150, 100))
+            font = pygame.font.SysFont("monospace", 30)
             
-            # Opciones
-            opt1 = font_menu.render("1 PLAYER", True, (255, 255, 255))
-            opt2 = font_menu.render("2 PLAYERS", True, (255, 255, 255))
+            # Dibujar Fila 1: Jugadores
+            color_p = (255, 255, 0) if self.menu_row == 0 else (255, 255, 255)
+            txt_p = font.render(f"PLAYERS: < {self.option_players} >", True, color_p)
+            self.screen.blit(txt_p, (150, 200))
             
-            self.screen.blit(opt1, (self.SCREEN_WIDTH//2 - 80, 250))
-            self.screen.blit(opt2, (self.SCREEN_WIDTH//2 - 80, 300))
-            
-            # El Cursor (un triángulo o pequeño cuadrado)
+            # Dibujar Fila 2: Velocidad
+            speeds_txt = ["SLOW", "NORMAL", "FAST"]
+            color_s = (255, 255, 0) if self.menu_row == 1 else (255, 255, 255)
+            txt_s = font.render(f"SPEED: < {speeds_txt[self.option_speed]} >", True, color_s)
+            self.screen.blit(txt_s, (150, 260))
+
+            # Cursor NES (Triángulo a la izquierda de la fila activa)
+         
             cursor_y = 255 if self.menu_option == 1 else 305
             pygame.draw.polygon(self.screen, (255, 255, 255), 
                                 [(self.SCREEN_WIDTH//2 - 110, cursor_y), 
