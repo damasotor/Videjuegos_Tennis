@@ -47,6 +47,16 @@ class Game(GameLoop):
         self.indices_puntos = [0, 0]  # [P1, P2]
         self.games_ganados = [0, 0]   # [P1, P2]
         self.server = 1
+        
+        # Variables de control de impacto y rebote
+        self.rebotó_una_vez = False
+        self.ultimo_en_golpear = 0  # 1 para P1, 2 para P2
+        self.punto_finalizado = False # Para evitar sumas múltiples
+        
+        # Estados del juego: "MENU", "PLAYING"
+        self.state = "MENU"
+        self.menu_option = 1  # 1 para '1 PLAYER', 2 para '2 PLAYERS'
+        self.num_players = 1
 
     def game_loop(self):
         self.run()
@@ -111,6 +121,17 @@ class Game(GameLoop):
 
     def handle_specific_events(self, event):
         if event.type == pygame.KEYDOWN:
+            if self.state == "MENU":
+                if event.key == pygame.K_UP or event.key == pygame.K_DOWN:
+                    # Cambiar entre 1 y 2 (estilo toggle)
+                    self.menu_option = 1 if self.menu_option == 2 else 2
+                
+                if event.key == pygame.K_RETURN: # Botón START
+                    self.num_players = self.menu_option
+                    self.state = "PLAYING"
+                    self.reset_for_serve()
+    
+        if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_F2:
                 self.score_p1 = 0
                 self.score_p2 = 0
@@ -160,87 +181,93 @@ class Game(GameLoop):
         return dist_x < threshold and dist_y < 15 and esta_en_altura_raqueta
 
     def update_game_logic(self, dt):
+        # 1. SI ESTAMOS EN EL MENÚ, NO PROCESAR FÍSICA DE PARTIDO
+        if self.state == "MENU":
+            return
+
         keys = pygame.key.get_pressed()
-        dist_umbral = 40  # Ajusta según prefieras la sensibilidad del golpe
+        dist_umbral = 40 
+        w, h = self.screen.get_size()
+        y_antes = self.ball.rect.centery
         
-        # --- LÓGICA DE JUGADOR 1 ---
+        # --- LÓGICA DE JUGADOR 1 (SIEMPRE HUMANO) ---
         self.player1.vx = 0
         self.player1.vy = 0
         is_moving_p1 = False
         
-        # Movimiento básico
         if keys[pygame.K_LEFT]: self.player1.vx = -150; is_moving_p1 = True
         elif keys[pygame.K_RIGHT]: self.player1.vx = 150; is_moving_p1 = True
         if keys[pygame.K_UP]: self.player1.vy = -150; is_moving_p1 = True
         elif keys[pygame.K_DOWN]: self.player1.vy = 150; is_moving_p1 = True
 
-        # GOLPES Y ANIMACIONES
-        # Prioridad 1: Si presiona 'o' (Saque/Alto)
+        # Golpes J1
         if keys[pygame.K_o]:
             self.player1.play("PlayerSaque", reset=False, lock=True)
-            # Física del golpe
             if self._check_ball_collision(self.player1, dist_umbral):
-                self.ball.vy = -250  # Hacia el fondo
-                self.ball.vz = 400   # Salto alto
-                self.ball.vx = (self.ball.rect.centerx - self.player1.rect.centerx) * 4
-
-        # Prioridad 2: Si presiona 'p' (Golpe Bajo)
+                self._aplicar_golpe(jugador=1, vy=-250, vz=400)
         elif keys[pygame.K_p]:
             self.player1.play("PlayerGolpeB", reset=False, lock=True)
-            # Física del golpe
             if self._check_ball_collision(self.player1, dist_umbral):
-                self.ball.vy = -300  # Más rápido hacia el fondo
-                self.ball.vz = 200   # Salto bajo/tenso
-                self.ball.vx = (self.ball.rect.centerx - self.player1.rect.centerx) * 4
+                self._aplicar_golpe(jugador=1, vy=-300, vz=200)
 
-        # Prioridad 3: Estados de movimiento (Solo si no está ejecutando un golpe)
-        elif not self.player1.locked:
-            if is_moving_p1:
-                if self.player1.current_anim != "PlayerWalk":
-                    self.player1.play("PlayerWalk", reset=True, lock=False)
-            else:
-                if self.player1.current_anim != "PlayerIdle":
-                    self.player1.play("PlayerIdle", reset=True, lock=False)
+        # Animaciones J1
+        if not self.player1.locked:
+            anim = "PlayerWalk" if is_moving_p1 else "PlayerIdle"
+            if self.player1.current_anim != anim: self.player1.play(anim, reset=True)
 
-        # --- Lógica de Jugador 2 ---
+        # --- LÓGICA DE JUGADOR 2 (IA O HUMANO) ---
         self.player2.vx = 0
         self.player2.vy = 0
         is_moving_p2 = False
-        
-        # MOVIMIENTO JUGADOR 2 (W, A, S, D)
-        if keys[pygame.K_a]: self.player2.vx = -150; is_moving_p2 = True
-        elif keys[pygame.K_d]: self.player2.vx = 150; is_moving_p2 = True
-        if keys[pygame.K_w]: self.player2.vy = -150; is_moving_p2 = True
-        elif keys[pygame.K_s]: self.player2.vy = 150; is_moving_p2 = True
-        
-        # GOLPES Y ANIMACIONES
-        # Prioridad 1: Si presiona 'y' (Saque/Alto)
-        if keys[pygame.K_y]:
-            self.player2.play("EnemySaque", reset=False, lock=True)
-            # Física del golpe
-            if self._check_ball_collision(self.player2, dist_umbral):
-                self.ball.vy = -250  # Hacia el fondo
-                self.ball.vz = -400   # Salto alto
-                self.ball.vx = (self.ball.rect.centerx - self.player2.rect.centerx) * 4
 
-        # Prioridad 2: Si presiona 'u' (Golpe Bajo)
-        elif keys[pygame.K_u]:
-            self.player2.play("EnemyGolpeB", reset=False, lock=True)
-            # Física del golpe
-            if self._check_ball_collision(self.player2, dist_umbral):
-                self.ball.vy = -300  # Más rápido hacia el fondo
-                self.ball.vz = -200   # Salto bajo/tenso
-                self.ball.vx = (self.ball.rect.centerx - self.player2.rect.centerx) * 4
-
-        # Prioridad 3: Estados de movimiento (Solo si no está ejecutando un golpe)
-        elif not self.player2.locked:
-            if is_moving_p2:
-                if self.player2.current_anim != "EnemyWalk":
-                    self.player2.play("EnemyWalk", reset=True, lock=False)
+        if self.num_players == 1:
+            # --- IA DIFÍCIL (PREDICTIVA) ---
+            if self.ball.vy < 0: # La pelota viene hacia la IA
+                # Calcular intercepción
+                dist_y = abs(self.player2.rect.centery - self.ball.rect.centery)
+                tiempo = dist_y / abs(self.ball.vy) if self.ball.vy != 0 else 0
+                target_x = self.ball.rect.centerx + (self.ball.vx * tiempo)
             else:
-                if self.player2.current_anim != "EnemyIdle":
-                    self.player2.play("EnemyIdle", reset=True, lock=False)
+                target_x = self.SCREEN_WIDTH // 2 # Volver al centro
 
+            # Movimiento IA
+            if self.player2.rect.centerx < target_x - 10: self.player2.vx = 180; is_moving_p2 = True
+            elif self.player2.rect.centerx > target_x + 10: self.player2.vx = -180; is_moving_p2 = True
+            
+            # Golpe IA
+            if self._check_ball_collision(self.player2, dist_umbral + 10):
+                self.player2.play("EnemyGolpeB", reset=False, lock=True)
+                # La IA tira cruzado: si el humano está a la izquierda, ella tira a la derecha
+                vx_dir = 150 if self.player1.rect.centerx < self.SCREEN_WIDTH // 2 else -150
+                self._aplicar_golpe(jugador=2, vy=300, vz=250, custom_vx=vx_dir)
+        else:
+            # --- JUGADOR 2 HUMANO (W, A, S, D, Y, U) ---
+            if keys[pygame.K_a]: self.player2.vx = -150; is_moving_p2 = True
+            elif keys[pygame.K_d]: self.player2.vx = 150; is_moving_p2 = True
+            if keys[pygame.K_w]: self.player2.vy = -150; is_moving_p2 = True
+            elif keys[pygame.K_s]: self.player2.vy = 150; is_moving_p2 = True
+            
+            if keys[pygame.K_y]:
+                self.player2.play("EnemySaque", reset=False, lock=True)
+                if self._check_ball_collision(self.player2, dist_umbral):
+                    self._aplicar_golpe(jugador=2, vy=250, vz=400)
+            elif keys[pygame.K_u]:
+                self.player2.play("EnemyGolpeB", reset=False, lock=True)
+                if self._check_ball_collision(self.player2, dist_umbral):
+                    self._aplicar_golpe(jugador=2, vy=300, vz=200)
+
+        # Animaciones J2
+        if not self.player2.locked:
+            anim = "EnemyWalk" if is_moving_p2 else "EnemyIdle"
+            if self.player2.current_anim != anim: self.player2.play(anim, reset=True)
+
+        # --- FÍSICA GLOBAL ---
+        self.all_sprites.update(dt)
+        self.ball.vz += self.GRAVITY * dt
+        self.ball.z += self.ball.vz * dt
+
+        # [ Aquí mantén tu código de colisión con la RED y PUNTOS que ya tienes ]
+        # ... (Red, Rebotes en paredes, Perspectiva y Sistema de Puntos) ...
         
         # Para choque de pelota con red
         y_antes = self.ball.rect.centery
@@ -335,103 +362,138 @@ class Game(GameLoop):
         # --- SISTEMA DE PUNTOS ---
 
         # --- LÓGICA DE REBOTE Y PUNTOS ---
-        if self.ball.z <= 0:
+        if self.ball.z <= 0 and not self.punto_finalizado:
             self.ball.z = 0
             
-            # Definimos los límites de la "cancha válida" (ajusta según tu sprite)
-            # Ejemplo: x entre 120 y 520, y entre 100 y 380
-            cancha_rect = pygame.Rect(120, 100, 400, 280) 
+            # Definimos el rectángulo de la cancha completa (ajusta estos valores a tu sprite)
+            # x_min, y_min, ancho, alto
+            rect_cancha = pygame.Rect(120, 100, 400, 280) 
+            mitad_y = rect_cancha.centery
             
-            # Si la pelota toca el suelo...
-            if not cancha_rect.collidepoint(self.ball.rect.center):
-                # ¡FUERA! Punto para el rival según en qué mitad caiga
-                if self.ball.rect.centery < self.SCREEN_HEIGHT // 2:
-                    self.anotar_punto(0) # Punto para P1 (abajo) porque cayó fuera arriba
-                else:
-                    self.anotar_punto(1) # Punto para P2 (arriba) porque cayó fuera abajo
+            # 1. ¿Cayó fuera de la cancha completa?
+            if not rect_cancha.collidepoint(self.ball.rect.center):
+                # Si el P1 la tiró fuera del campo rival, punto para P2
+                if self.ultimo_en_golpear == 1: self.anotar_punto(1)
+                else: self.anotar_punto(0)
                 
-                self.server = 1 if self.ball.rect.centery > self.SCREEN_HEIGHT // 2 else 2
+                self.punto_finalizado = True
                 self.reset_for_serve()
+
+            # 2. ¿Cayó dentro de la cancha?
             else:
-                # Si cae dentro, rebota (tu lógica actual)
-                self.ball.vz *= -0.6 
-                if abs(self.ball.vz) < 10: self.ball.vz = 0
+                # Si es el SEGUNDO rebote, es punto para el que la lanzó
+                if self.rebotó_una_vez:
+                    if self.ultimo_en_golpear == 1: self.anotar_punto(0)
+                    else: self.anotar_punto(1)
+                    
+                    self.punto_finalizado = True
+                    self.reset_for_serve()
+                else:
+                    # Es el PRIMER rebote: Validar si cayó en el lado correcto
+                    # Si P1 golpea, debe caer en el lado de arriba (y < mitad)
+                    lado_incorrecto = (self.ultimo_en_golpear == 1 and self.ball.rect.centery > mitad_y) or \
+                                      (self.ultimo_en_golpear == 2 and self.ball.rect.centery < mitad_y)
+                    
+                    if lado_incorrecto:
+                        # Si no cruza la red o cae en tu propio campo, punto rival
+                        rival = 1 if self.ultimo_en_golpear == 2 else 0
+                        self.anotar_punto(rival)
+                        self.punto_finalizado = True
+                        self.reset_for_serve()
+                    else:
+                        # Rebote válido, sigue el juego
+                        self.rebotó_una_vez = True
+                        self.ball.vz *= -0.5 # Rebote físico
 
-
-        # Si la pelota sale por arriba (Punto para P1)
-        if self.ball.rect.bottom < 0:
-            self.anotar_punto(0) # Jugador 1 anota
-            self.server = 2
-            self.reset_for_serve()
-
-        # Si la pelota sale por abajo (Punto para P2)
-        elif self.ball.rect.top > self.SCREEN_HEIGHT:
-            self.anotar_punto(1) # Jugador 2 anota
-            self.server = 1
-            self.reset_for_serve()
-            
+          
         # Si la pelota se detiene (choca con la red o se queda muerta)
         elif self.ball.vx == 0 and self.ball.vy == 0 and self.ball.z == 0:
             # Podrías añadir un temporizador aquí antes de resetear
             pass
 
     def draw_game_elements(self):
-        screen_rect = self.screen.get_rect()
-
-        if self.estadio: self.screen.blit(self.estadio, self.estadio.get_rect(center=screen_rect.center).topleft)
-        else:
-            self.screen.fill((30, 30, 40)) 
-
-        if self.cancha: self.screen.blit(self.cancha, self.cancha.get_rect(center=screen_rect.center).topleft)
+    
+        self.screen.fill((0, 0, 0)) # Fondo negro clásico
         
-        # Dibujamos la sombra (usamos getattr por seguridad)
-        z_actual = getattr(self.ball, 'z', 0)
+        if self.state == "MENU":
+            font_title = pygame.font.SysFont("monospace", 50, bold=True)
+            font_menu = pygame.font.SysFont("monospace", 30)
+            
+            # Título
+            title_surf = font_title.render("TOR TENNIS", True, (255, 255, 255))
+            self.screen.blit(title_surf, (self.SCREEN_WIDTH//2 - 150, 100))
+            
+            # Opciones
+            opt1 = font_menu.render("1 PLAYER", True, (255, 255, 255))
+            opt2 = font_menu.render("2 PLAYERS", True, (255, 255, 255))
+            
+            self.screen.blit(opt1, (self.SCREEN_WIDTH//2 - 80, 250))
+            self.screen.blit(opt2, (self.SCREEN_WIDTH//2 - 80, 300))
+            
+            # El Cursor (un triángulo o pequeño cuadrado)
+            cursor_y = 255 if self.menu_option == 1 else 305
+            pygame.draw.polygon(self.screen, (255, 255, 255), 
+                                [(self.SCREEN_WIDTH//2 - 110, cursor_y), 
+                                 (self.SCREEN_WIDTH//2 - 110, cursor_y + 20), 
+                                 (self.SCREEN_WIDTH//2 - 90, cursor_y + 10)])
         
-        # Dibujamos la sombra siempre que la pelota no esté "bajo tierra"
-        if z_actual >= 0:
+        elif self.state == "PLAYING":
+        
+            screen_rect = self.screen.get_rect()
+
+            if self.estadio: self.screen.blit(self.estadio, self.estadio.get_rect(center=screen_rect.center).topleft)
+            else:
+                self.screen.fill((30, 30, 40)) 
+
+            if self.cancha: self.screen.blit(self.cancha, self.cancha.get_rect(center=screen_rect.center).topleft)
+        
+            # Dibujamos la sombra (usamos getattr por seguridad)
+            z_actual = getattr(self.ball, 'z', 0)
+        
+            # Dibujamos la sombra siempre que la pelota no esté "bajo tierra"
+            if z_actual >= 0:
             # La sombra se hace un poco más pequeña si la pelota sube mucho
-            factor_sombra = self.ball.scale_factor * (1 - min(0.5, z_actual / 500))
-            shadow_w = int(20 * factor_sombra)
-            shadow_h = int(10 * factor_sombra)
+                factor_sombra = self.ball.scale_factor * (1 - min(0.5, z_actual / 500))
+                shadow_w = int(20 * factor_sombra)
+                shadow_h = int(10 * factor_sombra)
             
             # Crear superficie de sombra con transparencia
-            shadow_surf = pygame.Surface((shadow_w * 2, shadow_h * 2), pygame.SRCALPHA)
-            pygame.draw.ellipse(shadow_surf, (0, 0, 0, 100), shadow_surf.get_rect())
+                shadow_surf = pygame.Surface((shadow_w * 2, shadow_h * 2), pygame.SRCALPHA)
+                pygame.draw.ellipse(shadow_surf, (0, 0, 0, 100), shadow_surf.get_rect())
             
             # IMPORTANTE: La sombra se dibuja en la posición real (el suelo)
-            self.screen.blit(shadow_surf, shadow_surf.get_rect(center=self.ball.rect.center))
+                self.screen.blit(shadow_surf, shadow_surf.get_rect(center=self.ball.rect.center))
 
-        # DIBUJAR EN ORDEN DE PROFUNDIDAD
-        self.player2.draw(self.screen) # Jugador al fondo
+            # DIBUJAR EN ORDEN DE PROFUNDIDAD
+            self.player2.draw(self.screen) # Jugador al fondo
         
-        # Dibujar Pelota (la lógica de escala debe estar en el draw de GameObject)
-        self.ball.draw(self.screen)
+            # Dibujar Pelota (la lógica de escala debe estar en el draw de GameObject)
+            self.ball.draw(self.screen)
 
-        if self.red and self.cancha:
-            cancha_rect = self.cancha.get_rect(center=screen_rect.center)
-            red_rect = self.red.get_rect(midtop=(cancha_rect.centerx, cancha_rect.centery - 55))
-            self.screen.blit(self.red, red_rect.topleft)
+            if self.red and self.cancha:
+                cancha_rect = self.cancha.get_rect(center=screen_rect.center)
+                red_rect = self.red.get_rect(midtop=(cancha_rect.centerx, cancha_rect.centery - 55))
+                self.screen.blit(self.red, red_rect.topleft)
 
-        self.player1.draw(self.screen) # Jugador al frente
+            self.player1.draw(self.screen) # Jugador al frente
         
-        # --- DIBUJAR MARCADOR ---
-        font = pygame.font.SysFont("Arial", 20, bold=True)
+            # --- DIBUJAR MARCADOR ---
+            font = pygame.font.SysFont("Arial", 20, bold=True)
 
-        # Obtener los textos de tenis (0, 15, 30, 40, AD)
-        p1_tenis = self.puntos_tenis[self.indices_puntos[0]]
-        p2_tenis = self.puntos_tenis[self.indices_puntos[1]]
-        texto_juegos = font.render(f"GAMES - P1: {self.games_ganados[0]} | P2: {self.games_ganados[1]}", True, (255, 255, 255))
-        texto_puntos = font.render(f"PUNTOS - P1: {p1_tenis} | P2: {p2_tenis}", True, (255, 255, 0))
+            # Obtener los textos de tenis (0, 15, 30, 40, AD)
+            p1_tenis = self.puntos_tenis[self.indices_puntos[0]]
+            p2_tenis = self.puntos_tenis[self.indices_puntos[1]]
+            texto_juegos = font.render(f"GAMES - P1: {self.games_ganados[0]} | P2: {self.games_ganados[1]}", True, (255, 255, 255))
+            texto_puntos = font.render(f"PUNTOS - P1: {p1_tenis} | P2: {p2_tenis}", True, (255, 255, 0))
 
-        self.screen.blit(texto_juegos, (20, 20))
-        self.screen.blit(texto_puntos, (20, 45))
-
+            self.screen.blit(texto_juegos, (20, 20))
+            self.screen.blit(texto_puntos, (20, 45))
         
 
-        # FPS
-        font = pygame.font.SysFont(None, 20)
-        fps_text = font.render(f"FPS: {int(self.clock.get_fps())}", True, (255, 255, 255))
-        self.screen.blit(fps_text, (5, 5))
+            # FPS
+            font = pygame.font.SysFont(None, 20)
+            fps_text = font.render(f"FPS: {int(self.clock.get_fps())}", True, (255, 255, 255))
+            self.screen.blit(fps_text, (5, 5))
         
     def reset_for_serve(self):
         """Posiciona la pelota frente al jugador que saca"""
@@ -470,3 +532,26 @@ class Game(GameLoop):
         self.games_ganados[jugador_index] += 1
         self.indices_puntos = [0, 0] # Resetear puntos del game
         print(f"Juego para el Jugador {jugador_index + 1}!")
+        
+    def _aplicar_golpe(self, jugador, vy, vz, custom_vx=None):
+        """
+        Centraliza la física cuando un jugador golpea la pelota.
+        jugador: 1 o 2
+        vy: velocidad de profundidad
+        vz: velocidad de altura
+        custom_vx: si se pasa, usa este valor. Si no, calcula según el centro de la raqueta.
+        """
+        self.ultimo_en_golpear = jugador
+        self.rebotó_una_vez = False
+        self.punto_finalizado = False
+        
+        self.ball.vy = vy
+        self.ball.vz = vz
+        
+        if custom_vx is not None:
+            self.ball.vx = custom_vx
+        else:
+            # Cálculo de dirección basado en qué parte de la raqueta tocó
+            # Si toca el borde derecho, sale hacia la derecha
+            jugador_obj = self.player1 if jugador == 1 else self.player2
+            self.ball.vx = (self.ball.rect.centerx - jugador_obj.rect.centerx) * 4
